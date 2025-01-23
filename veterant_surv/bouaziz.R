@@ -3,6 +3,8 @@ library(timereg)
 library(tidyverse)
 
 # Data loading & cleaning
+data(melanoma)
+
 df = melanoma %>%
   mutate(
     lthick = log(thick),
@@ -44,4 +46,4 @@ df1 = survSplit(df,cut=c(1400),end="days",start="start",event="status")
 fit1=coxph(Surv(start,days,status==1)~ factor(sex)+lthick+factor(ulc)
            + factor(ulcnew), data=df1)
 
-
+# Kaplan-Meier
