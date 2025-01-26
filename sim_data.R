@@ -1,0 +1,59 @@
+set.seed(42) 
+
+#libraires
+library(survival)
+library(tidyverse)
+
+sim_data <- function(n, p, censor_rate) {
+  
+  # Gén Covar
+  covariates <- as.data.frame(matrix(rnorm(n * p, mean = 0, sd = 5 ), nrow = n, ncol = p))
+  colnames(covariates) <- paste0("Var", 1:p)
+  
+  # Gén coef avec zero
+  beta <- runif(p, min = -10, max = 10)
+  beta[sample(seq_along(beta), ceiling(0.8 * p))] <- 0
+  
+  # Calcul effet covar
+  effet_indi <- as.matrix(covariates) %*% beta
+  
+  # Gen de survie par terrible
+  lambda <- 0.1  
+  #survival_times <- -log(runif(n, min = 0, max = 1))/(lambda*effet_indi)
+
+    # Construction du dataset final
+  dataset <- data.frame(
+    covariates
+  )
+  dataset = dataset %>%
+    mutate(
+      effet_indi = effet_indi,
+      effet_indi = ifelse(effet_indi < 1,1,effet_indi ),
+      u = runif(n, min = 0, max = 1),
+      survival_times = -log(u)/(lambda*effet_indi),
+      censure_adm = ifelse(is.infinite(survival_times), 1, 0),
+      censure = ifelse(runif(nrow(dataset),min = 0, max = 1)<censor_rate  | censure_adm == 1,1,0),
+      time = ifelse(censure == 1, runif(nrow(dataset),min = 0, max = max(survival_times)/2),survival_times)
+           )
+  print(paste("Les coef sont:", toString(round(beta,3))))
+  
+  return(list(data = dataset, coef = beta))
+}
+simulation = sim_data(n = 5000, p = 100, censor_rate = 0.3)
+df <- simulation$data %>%
+  select(-c("effet_indi","u","survival_times","censure_adm"))
+
+# modèle de Cox
+cox_model <- coxph(Surv(time, censure) ~ ., data = df)
+#summary(cox_model)
+
+
+#Comparaison
+dg = tibble(simulation$coef,cox_model$coefficients,as.vector(summary(cox_model)$coefficients[,5]))
+colnames(dg) = c("Vrai_Coef","Est_Coef","p-value")
+
+dh = dg %>%
+  filter(Vrai_Coef > 0)
+
+plot(dh$Vrai_Coef,dh$Est_Coef)
+
