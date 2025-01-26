@@ -39,7 +39,7 @@ sim_data <- function(n, p, censor_rate) {
   
   return(list(data = dataset, coef = beta))
 }
-simulation = sim_data(n = 5000, p = 100, censor_rate = 0.3)
+simulation = sim_data(n = 5000, p = 5, censor_rate = 0.3)
 df <- simulation$data %>%
   select(-c("effet_indi","u","survival_times","censure_adm"))
 
@@ -52,8 +52,5 @@ cox_model <- coxph(Surv(time, censure) ~ ., data = df)
 dg = tibble(simulation$coef,cox_model$coefficients,as.vector(summary(cox_model)$coefficients[,5]))
 colnames(dg) = c("Vrai_Coef","Est_Coef","p-value")
 
-dh = dg %>%
-  filter(Vrai_Coef > 0)
-
-plot(dh$Vrai_Coef,dh$Est_Coef)
+# 
 
