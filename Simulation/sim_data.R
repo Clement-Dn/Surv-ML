@@ -7,7 +7,7 @@ library(tidyverse)
 sim_data <- function(n, p, censor_rate, prop_zero) {
   
   # Gén Covar
-  covariates <- as.data.frame(matrix(rnorm(n * p, mean = 0, sd = 5 ), nrow = n, ncol = p))
+  covariates <- as.data.frame(matrix(rnorm(n * p, mean = 0, sd = 1 ), nrow = n, ncol = p))
   colnames(covariates) <- paste0("Var", 1:p)
   
   # Gén coef avec zero
@@ -31,7 +31,7 @@ sim_data <- function(n, p, censor_rate, prop_zero) {
       effet_indi = ifelse(effet_indi < 1,1,effet_indi ),
       u = runif(n, min = 0, max = 1),
       survival_times = -log(u)/(lambda*effet_indi),
-      #censure_adm = ifelse(is.infinite(survival_times), 1, 0),
+      censure_adm = ifelse(is.infinite(survival_times), 1, 0),
       censure = ifelse(runif(nrow(dataset),min = 0, max = 1)<censor_rate  | censure_adm == 1,1,0),
       time = ifelse(censure == 1, runif(nrow(dataset),min = 0, max = max(survival_times)/2),survival_times)
            )
@@ -39,7 +39,7 @@ sim_data <- function(n, p, censor_rate, prop_zero) {
   
   return(list(data = dataset, coef = beta))
 }
-simulation = sim_data(n = 50000, p = 50, censor_rate = 0.001,prop_zero = 0.1)
+simulation = sim_data(n = 50000, p = 50, censor_rate = 0.1,prop_zero = 0.5)
 df <- simulation$data %>%
   select(-c("effet_indi","u","survival_times","censure_adm"))
 
@@ -53,4 +53,34 @@ dg = tibble(simulation$coef,cox_model$coefficients,as.vector(summary(cox_model)$
 colnames(dg) = c("Vrai_Coef","Est_Coef","p-value")
 
 dg = dg %>% mutate(ratio = Vrai_Coef/Est_Coef)
-hist(dg$Est_Coef)
+
+
+#Histogrammes
+
+hist_coef_vrai = ggplot(dg, aes(x = Vrai_Coef)) + 
+  geom_histogram(binwidth = 1, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Distribution des Coefficients",
+    x = "Coefficient ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+hist_coef_est = ggplot(dg, aes(x = Est_Coef)) + 
+  geom_histogram(binwidth = 0.01, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Distribution des coefficients estimés",
+    x = "Coefficient ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )

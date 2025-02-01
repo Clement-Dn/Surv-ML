@@ -1,0 +1,18 @@
+```{---}
+title: "Simulation"
+author: "Clem"
+output: html_document
+---
+
+source("sim_data.R", local = knitr::knit_global())
+# or sys.source("your-script.R", envir = knitr::knit_global())
+```
+
+```{r}
+hist_coef_vrai
+
+```
+```{r}
+hist_coef_est
+```
+
