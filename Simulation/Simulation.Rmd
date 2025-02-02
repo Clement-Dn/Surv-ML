@@ -1,0 +1,35 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{---}
+title: "Simulation"
+author: "Clem"
+output: html_document
+---
+
+source("sim_data.R", local = knitr::knit_global())
+# or sys.source("your-script.R", envir = knitr::knit_global())
+```
+
+```{r, echo=FALSE}
+load("sim_data.RData")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+
+hist_time
+hist_time_log
+```
+
+```{r}
+par(mfrow = c(1, 2))
+
+hist_coef_vrai
+hist_coef_est
+```
+
+
+```

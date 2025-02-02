@@ -2,17 +2,18 @@ set.seed(42)
 
 #libraires
 library(survival)
+library(survminer)
 library(tidyverse)
 
-sim_data <- function(n, p, censor_rate) {
+sim_data <- function(n, p, censor_rate, prop_zero) {
   
   # Gén Covar
-  covariates <- as.data.frame(matrix(rnorm(n * p, mean = 0, sd = 5 ), nrow = n, ncol = p))
+  covariates <- as.data.frame(matrix(rnorm(n * p, mean = 0, sd = 1 ), nrow = n, ncol = p))
   colnames(covariates) <- paste0("Var", 1:p)
   
   # Gén coef avec zero
   beta <- runif(p, min = -10, max = 10)
-  beta[sample(seq_along(beta), ceiling(0.8 * p))] <- 0
+  beta[sample(seq_along(beta), ceiling(prop_zero * p))] <- 0
   
   # Calcul effet covar
   effet_indi <- as.matrix(covariates) %*% beta
@@ -39,7 +40,7 @@ sim_data <- function(n, p, censor_rate) {
   
   return(list(data = dataset, coef = beta))
 }
-simulation = sim_data(n = 5000, p = 5, censor_rate = 0.3)
+simulation = sim_data(n = 50000, p = 50, censor_rate = 0.1,prop_zero = 0.5)
 df <- simulation$data %>%
   select(-c("effet_indi","u","survival_times","censure_adm"))
 
@@ -52,5 +53,76 @@ cox_model <- coxph(Surv(time, censure) ~ ., data = df)
 dg = tibble(simulation$coef,cox_model$coefficients,as.vector(summary(cox_model)$coefficients[,5]))
 colnames(dg) = c("Vrai_Coef","Est_Coef","p-value")
 
-# 
+dg = dg %>% mutate(ratio = Vrai_Coef/Est_Coef)
 
+
+# Kaplan-Meier
+df = df %>% arrange(time)
+km_fit <- survfit(Surv(df$time, df$censure) ~ 1)  # ~1 pas de strat
+
+# Visualiser la courbe de Kaplan-Meier
+ggsurvplot(km_fit, data = df, 
+           xlab = "Temps",            # Légende de l'axe des x
+           ylab = "Probabilité de survie" # Légende de l'axe des y
+)
+
+#Histogrammes
+hist_time = ggplot(df, aes(x = time)) + 
+  geom_histogram(binwidth = 1, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Simulation du temps de survie",
+    x = "Temps ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+hist_time_log = ggplot(df, aes(x = log(time))) + 
+  geom_histogram(binwidth = 1, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Simulation du temps de survie",
+    x = "log du Temps ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+
+hist_coef_vrai = ggplot(dg, aes(x = Vrai_Coef)) + 
+  geom_histogram(binwidth = 1, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Distribution des Coefficients",
+    x = "Coefficient ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+hist_coef_est = ggplot(dg, aes(x = Est_Coef)) + 
+  geom_histogram(binwidth = 0.01, color = "black", fill = "skyblue", alpha = 0.7) +
+  labs(
+    title = "Distribution des coefficients estimés",
+    x = "Coefficient ",
+    y = "Fréquence"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.text = element_text(size = 12),
+    axis.title = element_text(size = 14)
+  )
+
+setwd("~/Surv-ML/Simulation")
+save(hist_time,hist_time_log,hist_coef_vrai, hist_coef_est, file = "sim_data.RData")
+setwd("~/Surv-ML")
