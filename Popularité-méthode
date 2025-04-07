@@ -1,0 +1,64 @@
+library(rentrez)
+library(tidyverse)
+library(gridExtra)
+
+# Source code: https://cran.r-project.org/web/packages/rentrez/vignettes/rentrez_tutorial.html
+# Partie: Advanced counting
+
+search_year <- function(year, term){
+  query <- paste(term, "AND (", year, "[PDAT])")
+  entrez_search(db="pubmed", term=query, retmax=0)$count
+}
+
+year <- 2008:2024
+
+papers_XAI <- sapply(year, search_year, term="XAI", USE.NAMES=FALSE)
+data_XAI = tibble(year = year,data = papers_XAI)
+
+papers_SHAP <- sapply(year, search_year, term="SHAP", USE.NAMES=FALSE)
+data_SHAP = tibble(year = year,data = papers_SHAP)
+
+papers_survSHAP <- sapply(year, search_year, term="survSHAP", USE.NAMES=FALSE)
+data_survSHAP = tibble(year = year,data = papers_survSHAP)
+
+papers_TreeSHAP <- sapply(year, search_year, term="treeSHAP", USE.NAMES=FALSE)
+data_TreeSHAP = tibble(year = year,data = papers_TreeSHAP)
+
+papers_survTreeSHAP <- sapply(year, search_year, term="survTreeSHAP", USE.NAMES=FALSE)
+data_survTreeSHAP = tibble(year = year,data = papers_survTreeSHAP)
+
+g1 = ggplot(data_SHAP, aes(x = year, y = papers_SHAP)) +
+  geom_line(color = "blue", size = 1) +        # Courbe
+  geom_point(color = "purple", size = 2) +        # Points
+  labs(title = "Nombre de publications citant chaque méthode. 
+       \n SHAP:",
+       x = "Année",
+       y = "Nombre de publications") +
+  theme_minimal()   
+
+g2 = ggplot(data_survSHAP, aes(x = year, y = papers_survSHAP)) +
+  geom_line(color = "blue", size = 1) +        # Courbe
+  geom_point(color = "purple", size = 2) +        # Points
+  labs(title = "\n
+survSHAP:",
+       x = "Année",
+       y = "Nombre de publications") +
+  theme_minimal()   
+
+g3 = ggplot(data_TreeSHAP, aes(x = year, y = papers_TreeSHAP)) +
+  geom_line(color = "blue", size = 1) +        # Courbe
+  geom_point(color = "purple", size = 2) +        # Points
+  labs(title = "TreeSHAP:",
+       x = "Année",
+       y = "Nombre de publications") +
+  theme_minimal()   
+
+g4 = ggplot(data_survTreeSHAP, aes(x = year, y = papers_survTreeSHAP)) +
+  geom_line(color = "blue", size = 1) +        # Courbe
+  geom_point(color = "purple", size = 2) +        # Points
+  labs(title = "survTreeSHAP:",
+       x = "Année",
+       y = "Nombre de publications") +
+  theme_minimal()   
+
+grid.arrange(g1, g2, g3, g4, ncol=2, nrow=2)
