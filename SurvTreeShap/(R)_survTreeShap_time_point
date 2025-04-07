@@ -1,0 +1,201 @@
+library(treeshap)
+library(xgboost)
+library(randomForestSRC)
+library(tidyverse)
+library(coxed)
+# set.seed(123)
+
+# Entrées:
+#> Données (dataframe)
+#> Target
+#> Statut
+#>
+#>
+#>
+#>
+
+data(veteran, package = "randomForestSRC")
+
+
+sTS_at_timepoint = function(data,
+                        target_var,
+                        status_var,
+                        n_tree,
+                        num_nodesize,
+                        time_point,
+                        type_pred){
+  
+  # 1er partie: On fait un treeShap de base, pour notamment récupérer le model unifie
+  # 2eme partie: On génére une RSF
+  # 3eme patie: Transformer la RSF en foret adapter à treeshap
+  # 4eme partie: SurvTreeShap
+  
+  data_tree <- data %>%
+    select(-c(target_var,status_var))
+  target <- data %>%
+    select(c(target_var)) %>%
+    as.matrix()
+  
+  
+  # 1er Partie: Création d'un treeshap (le + petit possible) 
+  param <- list(objective = "reg:squarederror", max_depth = 6)
+  xgb_model <- xgboost::xgboost(as.matrix(data_tree),
+                                params = param,
+                                label = target,
+                                nrounds = 0, #compta python 0 ==> 1 le + petit possible
+                                verbose = 0)
+  unified <- unify(xgb_model, data_tree) #Greffeon
+  df_treeshap = unified$model #Utiliser pour calculer la dif du nmbr de var entre la RSF et le greffeon
+  
+  
+  # 2e Partie: génération d'une RSF
+  data_RSF <- data 
+  ## randomForestSRC ne prend pas directement en charge l'évaluation quasi-quotée
+  formula_rsf = as.formula(paste0("Surv(", target_var, ",",status_var,") ~ ."))
+  RSF <- rfsrc(formula = formula_rsf, data, ntree = n_tree, nodesize = num_nodesize, statistics=T)
+  # Transformer les data de pred de S(t)
+  nmb_feuilles = RSF[["leaf.count"]]
+  nmb_arbres = RSF[["ntree"]]
+  nmb_t = length(RSF[["time.interest"]])
+  nmb_pred = nmb_feuilles*nmb_t
+  # Noeud par noeud
+  # Si nmb de point de temps = x & nmb de feuilles = y
+  # Pour t = 1 on veut w
+  
+  ## On ajoute les predictions
+  
+  
+  
+  rang_time_point <- which(RSF[["time.interest"]] == time_point)
+  
+  prediction = tibble(Prediction = RSF[["forest"]][["nativeArrayTNDS"]][["tnSURV"]]) %>%
+    mutate(tree_num= rep(1:nmb_arbres, times = RSF[["forest"]][["leafCount"]]*nmb_t),
+           t = rep(RSF[["time.interest"]],  sum(nmb_feuilles)) ) %>%
+    group_by(tree_num,t) %>%
+    filter(t == time_point) %>%
+    ungroup() %>%
+    select(-c("t","tree_num"))
+  
+  df_noeuds_pred = RSF$forest$nativeArray %>%
+    filter(
+      is.na(contPT)
+    ) %>%
+    arrange(treeID,nodeID) %>%
+    bind_cols(prediction)
+  
+  ## On récup autres les noeuds de la RSF
+  df_surv = RSF$forest$nativeArray %>%
+    filter(!is.na(contPT)) %>%
+    mutate(
+      Prediction = NA
+    ) %>%
+    bind_rows(df_noeuds_pred)
+  
+  # 3eme patie: Transformer la RSF en foret adapter à treeshap
+  df_surv = df_surv %>%
+    rename(No = brnodeID ) %>%
+    group_by(treeID) %>%
+    mutate(num_node = row_number()) %>%
+    group_by(treeID,nodeID) %>%
+    arrange(desc(nodeSZ)) %>%
+    mutate(num_dans_group = row_number(),
+           num_group_max = n(),
+           num_suivant = lead(num_node, order_by = num_dans_group),
+           Yes = ifelse(num_dans_group != num_group_max,num_suivant,NA)) %>%
+    ungroup()
+  
+  
+  ## On crée une table pour passer d'un colonne avec le numéro des var à une colonne avec le nom des vars
+  conv_parmID = data.frame(RSF$xvar.names) %>%
+    mutate(parmID = 1:length(RSF$xvar.names))
+  colnames(conv_parmID) = c("var_names","parmID")
+  
+  df_surv = df_surv %>% 
+    left_join(conv_parmID, by = "parmID") %>% 
+    rename(Tree = treeID,
+           Node = num_node,
+           Cover = nodeSZ,
+           Feature = var_names,
+           Split = contPT) %>%
+    mutate(
+      Decision.type= as.factor(ifelse(!is.na(Feature),"<=",NA)),
+      Missing = Yes
+    ) %>%
+    select("Tree","Node","Cover","Decision.type","No","Yes","Missing","Split","Feature","Prediction")
+  
+  # Changement surDecision.type pour is.model_unified 
+  levels(df_surv$Decision.type) = c("<=","<")
+  
+  # 4e Partie: Création d'un objet Treeshap
+  #Objet de base treeshap à partie de la RF
+  
+  # Changer les lignes d'un model_unified "greffeon" puis couper
+  unified <- unify(xgb_model, data)
+  
+  # tentative greffe direct
+  unified$model = df_surv
+  
+  # Trie des var (tree et node)
+  unified$model = unified$model %>%
+    arrange(Tree,Node) %>%
+    mutate(Tree = Tree - 1,
+           Node = Node - 1)
+  
+  # Changer noms des features & xvar dans l'objet treeshap de base
+  unified$data <- RSF$xvar
+  unified$feature_names <- RSF$xvar.names
+  
+  #is.model_unified(unified)
+  
+  treeshap1 <- treeshap(unified,  data, verbose = 0)
+  
+  treeshap1$eval_times = unique(data %>% select(c(target_var)) %>% arrange(target_var))
+  
+  
+  
+  
+  return(treeshap1)
+}
+
+# DATA
+data(veteran, package = "randomForestSRC")
+
+#df = sTS_at_timepoint(data = veteran,target_var = "time",status_var = "status",n_tree = 1,num_nodesize = 2,time_point = 1)
+
+
+
+
+sTS_allpoints = function(data,
+                         target_var,
+                         status_var,
+                         n_tree,
+                         num_nodesize,
+                         type_pred){
+  
+  df = list()
+  
+data_tree <- data %>%
+  select(-c(target_var,status_var))
+target <- data %>%
+  select(c(target_var)) %>%
+  as.matrix()
+data_RSF <- data 
+formula_rsf = as.formula(paste0("Surv(", target_var, ",",status_var,") ~ ."))
+RSF <- rfsrc(formula = formula_rsf, data, ntree = n_tree, nodesize = num_nodesize, statistics=T)
+
+time_points = RSF[["time.interest"]]
+
+
+for(i in 1:length(time_points)){
+  time = time_points[i]
+  df[[i]] = sTS_at_timepoint(data,
+                             target_var = target_var,
+                             status_var = status_var,
+                             n_tree = 1,
+                             num_nodesize = 2,
+                             time_point = time)$shaps
+}
+names(df) = time_points
+return(df)
+}
+
