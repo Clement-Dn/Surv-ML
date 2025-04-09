@@ -105,7 +105,9 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
         # Afficher le graphique
         plt.show() 
 
-def Shapvaluesrank(model= None, data=None, times=None, sample_size=5, number_of_values=None ):
+def Shapvaluesrank(model= None, data=None, times=None, sample_size=None, number_of_values=None ):
+    if sample_size==None:
+        sample_size=len(data)
     sample_size=min(sample_size, len(data))
     if number_of_values==None:
         number_of_values = len(data.columns)
