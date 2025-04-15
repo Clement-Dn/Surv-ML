@@ -113,12 +113,52 @@ def Shapvaluesrank(model= None, data=None, times=None, sample_size=None, number_
         number_of_values = len(data.columns)
     aires=np.zeros(len([data.columns]))
     for i in range(sample_size):
-        x,y=Shapvalues(model= model, data=data.iloc[i, :], times=None)
+        x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
         aires = aires+ np.array([np.trapz(np.abs(y[:,i]), x) for i in range(len(y[1])-1)])
 
     top_indices = np.argsort(aires)[-number_of_values:]
     return([( number_of_values-n, data.columns[i], aires[i]/sample_size) for n, i in enumerate(top_indices)][::-1])
 
+def VariableRank(model= None, data=None, times=None, sample_size=None, plot=True ):
+    if sample_size==None:
+        sample_size=len(data)
+    sample_size=min(sample_size, len(data))
+    rank=[]
+    for i in range(sample_size):
+        x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
+        aires = np.array([np.trapz(np.abs(y[:,i]), x) for i in range(len(y[1])-1)])
+        top_indices = np.argsort(aires)[-len(data.columns):]
+        rank.append(top_indices)
+
+    # Matrice de comptage : lignes = rangs, colonnes = variables
+    counts = np.zeros((len(data.columns), len(data.columns)), dtype=int)
+
+    # Comptage des apparitions
+    for arr in rank:
+        for pos, val in enumerate(arr):
+            counts[pos, val] += 1
+
+    # DataFrame pour tracer facilement
+    df = pd.DataFrame(counts, columns=[i for i in range(len(data.columns))])
+    df.index = [f"{len(data.columns)-i}" for i in range(len(data.columns))]
+
+    if plot: 
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        bottom = np.zeros(len(df))
+        for i, col in enumerate(df.columns):
+            ax.barh(df.index, df[col], left=bottom, label=data.columns[col])
+            bottom += df[col]
+
+        # Mise en forme
+        ax.set_xlabel("Nombre d'apparitions à cette position")
+        ax.set_ylabel("Rang d'importance")
+        ax.set_title("Distribution des variables par rang d'importance")
+        ax.legend(title="Variables", bbox_to_anchor=(1.05, 1), loc="upper left")
+        plt.tight_layout()
+        plt.show()
+    df.columns = list(data.columns)
+    return(df)
 
 class TreeExplainer:
     def __init__(self, model, t=0, **kwargs):
