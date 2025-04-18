@@ -111,13 +111,32 @@ def Shapvaluesrank(model= None, data=None, times=None, sample_size=None, number_
     sample_size=min(sample_size, len(data))
     if number_of_values==None:
         number_of_values = len(data.columns)
-    aires=np.zeros(len([data.columns]))
+    aires_n=np.zeros(len([data.columns]))
+    aires_p=np.zeros(len([data.columns]))
     for i in range(sample_size):
         x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
-        aires = aires+ np.array([np.trapz(np.abs(y[:,i]), x) for i in range(len(y[1])-1)])
+        aires_n = aires_n + np.array([-np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
+        aires_p = aires_p + np.array([np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
+    top_indices = np.argsort( aires_p -aires_n)[-number_of_values:]
 
-    top_indices = np.argsort(aires)[-number_of_values:]
-    return([( number_of_values-n, data.columns[i], aires[i]/sample_size) for n, i in enumerate(top_indices)][::-1])
+    # Création du graphique
+    plt.figure(figsize=(10, 7))
+    for n,i in enumerate(top_indices):
+        plt.barh(number_of_values -n-1, aires_n[i]/sample_size, color='green')
+        plt.barh(number_of_values -n-1, aires_p[i]/sample_size, color='red')
+
+    # Ajustements
+    plt.yticks(list(range(number_of_values)), [data.columns[i] for i in top_indices[::-1]])
+    plt.axvline(0, color='black')  # Ligne centrale
+    plt.xlabel('Valeur')
+    plt.title('Comparaison valeurs négatives / positives par variable')
+    plt.legend()
+    plt.tight_layout()
+    plt.gca().invert_yaxis()  # Pour avoir la première ligne tout en haut
+
+    plt.show()
+
+    return(data.columns,aires_n, aires_p)
 
 def VariableRank(model= None, data=None, times=None, sample_size=None, plot=True ):
     if sample_size==None:
