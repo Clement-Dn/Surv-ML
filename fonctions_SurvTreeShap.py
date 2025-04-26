@@ -59,7 +59,13 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
         y_plot=np.array([y[:,i] for i in indices]).T
         legend=[columns[i] for i in indices]
 
-        plt.plot(x,y_plot,label=legend)
+
+        cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+        colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+        plt.figure(figsize=(10,6))
+        for i in range(y_plot.shape[1]):
+            plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
+
 
         # Ajouter des labels et une légende
         plt.xlabel("Temps (mois)")
@@ -80,7 +86,11 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
         y_plot=np.array([y[:,i] for i in indices]).T
         legend=[columns[i] for i in indices]
 
-        plt.plot(x,y_plot,label=legend)
+        cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+        colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+        plt.figure(figsize=(10,6))
+        for i in range(y_plot.shape[1]):
+            plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
 
         # Ajouter des labels et une légende
         plt.xlabel("Temps (mois)")
@@ -94,7 +104,11 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
     else:
         y_plot=np.array([y[:,i] for i in range(len(y[1])-1)]).T
 
-        plt.plot(x,y_plot,label=columns)
+        cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+        colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+        plt.figure(figsize=(10,6))
+        for i in range(y_plot.shape[1]):
+            plt.plot(x, y_plot[:,i], label=columns[i], color=colors[i])
 
         # Ajouter des labels et une légende
         plt.xlabel("Temps (mois)")
@@ -140,13 +154,13 @@ def Shapvaluesrank(model= None, data=None, times=None, sample_size=None, number_
 
     return(data.columns,aires_n, aires_p)
 
-def VariableRank(model= None, data=None, times=None, sample_size=None, plot=True ):
-    if sample_size==None:
-        sample_size=len(data)
-    sample_size=min(sample_size, len(data))
-    rank=[]
+def VariableRank(model=None, data=None, times=None, sample_size=None, plot=True):
+    if sample_size is None:
+        sample_size = len(data)
+    sample_size = min(sample_size, len(data))
+    rank = []
     for i in range(sample_size):
-        x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
+        x, y = Shapvalues(model=model, data=data.iloc[i, :], times=times)
         aires = np.array([np.trapz(np.abs(y[:,i]), x) for i in range(len(y[1])-1)])
         top_indices = np.argsort(aires)[-len(data.columns):]
         rank.append(top_indices)
@@ -154,32 +168,36 @@ def VariableRank(model= None, data=None, times=None, sample_size=None, plot=True
     # Matrice de comptage : lignes = rangs, colonnes = variables
     counts = np.zeros((len(data.columns), len(data.columns)), dtype=int)
 
-    # Comptage des apparitions
     for arr in rank:
         for pos, val in enumerate(arr):
             counts[pos, val] += 1
 
-    # DataFrame pour tracer facilement
     df = pd.DataFrame(counts, columns=[i for i in range(len(data.columns))])
     df.index = [f"{len(data.columns)-i}" for i in range(len(data.columns))]
 
-    if plot: 
-        fig, ax = plt.subplots(figsize=(10, 6))
+    if plot:
+        fig, ax = plt.subplots(figsize=(12, 8))
 
         bottom = np.zeros(len(df))
-        for i, col in enumerate(df.columns):
-            ax.barh(df.index, df[col], left=bottom, label=data.columns[col])
-            bottom += df[col]
 
-        # Mise en forme
+        # === Ajout d'une colormap rainbow ===
+        cmap = plt.get_cmap('rainbow')
+        colors = [cmap(i / len(df.columns)) for i in range(len(df.columns))]
+
+        for i, col in enumerate(df.columns):
+            ax.barh(df.index, df[col], left=bottom, label=data.columns[col], color=colors[i])
+            bottom += df[col]
+        # =====================================
+
         ax.set_xlabel("Nombre d'apparitions à cette position")
         ax.set_ylabel("Rang d'importance")
         ax.set_title("Distribution des variables par rang d'importance")
-        ax.legend(title="Variables", bbox_to_anchor=(1.05, 1), loc="upper left")
+        ax.legend(title="Variables", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
         plt.tight_layout()
         plt.show()
+
     df.columns = list(data.columns)
-    return(df)
+    return df
 
 class TreeExplainer:
     def __init__(self, model, t=0, **kwargs):
