@@ -1,40 +1,246 @@
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import shap
-import survshap
-import seaborn as sns 
-import survinsights
-from sksurv.util import Surv
-from sksurv.metrics import brier_score
-from sksurv.ensemble import RandomSurvivalForest
-from sksurv.linear_model import CoxPHSurvivalAnalysis
-from sksurv.metrics import integrated_brier_score
-from sksurv.metrics import concordance_index_censored
-from lifelines import CoxPHFitter
-from lifelines import KaplanMeierFitter
 from sklearn.model_selection import train_test_split
-from survinsights import local_explaination
-from sklearn.preprocessing import LabelEncoder
-import time
 import numba
-import numpy as np
-import sklearn.ensemble
-import shap
-import matplotlib.pyplot as plt
-from sksurv.datasets import load_whas500
-from sksurv.ensemble import RandomSurvivalForest
-from sklearn.model_selection import train_test_split
-from lifelines import KaplanMeierFitter
-import numpy as np
-import itertools
-import random
-from survinsights import local_explaination
-from survinsights.explainer import explainer
 from tqdm import tqdm
-from scipy.integrate import simpson
+
+class SurvTreeSHAPexplainer:
+
+    def __init__(self, model, data, times=None):
+        self.model = model
+        self.data = data
+        if times is None:
+            self.times = model.estimators_[0].unique_times_
+        else:
+            self.times = times
+    
+    def computesurvshap(self, n=0):
+
+        """
+        Computes the SurvSHAP value of the RSF model for data.iloc[n].
+
+        Inputs :
+        n (int): the number of the line in the data frame we want to copute the SurvSHAP values of
+
+        Outputs :
+        values(array): SurvSHAP values of data.iloc[n]
+        """
+
+        self.times = np.array(self.times)
+        values = np.array([
+                        TreeExplainer(self.model,t=i).shap_values(self.data.iloc[n])
+                        for i in tqdm(range(len(self.times)))
+                        ])
+        return(values)
+    
+    def plotgraph(self, n=0 , selection=None, min=None, max=None ):
+
+        """
+        Plots the graph of the SurvSHAP values of data.iloc[iloc].
+
+        Inputs :
+        n (int): the number of the line in the data frame we want to plot the SurvSHAP values of
+        selection (str): the type of selection method we want to use for the plot: "area", "minmax" or None. "area" only keeps variables that have the highest and lowest area under the curve, "minmax" only keeps variables with the top highest and botom lowest values, None keeps every variable. 
+        min (int): number of lowest variables to keep when using "area" or "minmax" selection
+        max (int): number of highest variables to keep when using "area" or "minmax" selection
+        """
+
+        y = self.computesurvshap(n)
+        columns = self.data.columns
+        x = self.times
+
+        if selection=="minmax":
+            top_values= [y[:,i].max() for i in range(len(y[1])-1)]
+            top_indices = np.argsort(top_values)[-max:]
+            bot_values= [y[:,i].min() for i in range(len(y[1])-1)]
+            bot_indices = np.argsort(bot_values)[:min]
+
+            indices=np.concatenate((top_indices, bot_indices))
+
+            y_plot=np.array([y[:,i] for i in indices]).T
+            legend=[columns[i] for i in indices]
+
+
+            cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+            colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+            plt.figure(figsize=(10,6))
+            for i in range(y_plot.shape[1]):
+                plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
+
+
+            # Ajouter des labels et une légende
+            plt.xlabel("Time")
+            plt.ylabel("SurvSHAP(t)")
+            plt.title("SurvSHAP values of most contributing variables selecting with minmax method")
+            plt.grid(True)
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+            # Afficher le graphique
+            plt.show()
+        
+        elif selection=="area":
+            area = [np.trapz(y[:,i], x) for i in range(len(y[1])-1)]
+            top_indices = np.argsort(area)[-max:]
+            bot_indices = np.argsort(area)[:min]
+
+            indices=np.concatenate((top_indices, bot_indices))
+
+            y_plot=np.array([y[:,i] for i in indices]).T
+            legend=[columns[i] for i in indices]
+
+            cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+            colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+            plt.figure(figsize=(10,6))
+            for i in range(y_plot.shape[1]):
+                plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
+
+            # Ajouter des labels et une légende
+            plt.xlabel("Time")
+            plt.ylabel("SurvSHAP(t)")
+            plt.title("SurvSHAP values of most contributing variables selecting with area under curve method")
+            plt.grid(True)
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+
+            # Afficher le graphique
+            plt.show()
+        
+        else:
+            y_plot=np.array([y[:,i] for i in range(len(y[1])-1)]).T
+
+            cmap = plt.get_cmap('rainbow')  # ou 'nipy_spectral', 'plasma', etc.
+            colors = [cmap(i / y_plot.shape[1]) for i in range(y_plot.shape[1])]
+            plt.figure(figsize=(10,6))
+            for i in range(y_plot.shape[1]):
+                plt.plot(x, y_plot[:,i], label=columns[i], color=colors[i])
+
+            # Ajouter des labels et une légende
+            plt.xlabel("Time")
+            plt.ylabel("SurvSHAP(t)")
+            plt.title("All SurvSHAP values")
+            plt.grid(True)
+            plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+            #plt.legend(loc="upper left",fontsize=8)
+
+            # Afficher le graphique
+            plt.show() 
+    
+    def averagesurvshap(self, sample_size=1, number_of_values=None, plot=True, return_=False ):
+
+        data=self.data
+        model=self.model
+        times=self.times
+        
+        if sample_size==None:
+            sample_size=len(data)
+        sample_size=min(sample_size, len(data))
+        if number_of_values==None:
+            number_of_values = len(data.columns)
+        aires_n=np.zeros(len([data.columns]))
+        aires_p=np.zeros(len([data.columns]))
+        for i in range(sample_size):
+            x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
+            aires_n = aires_n + np.array([-np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
+            aires_p = aires_p + np.array([np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
+        aires_n = aires_n / sample_size
+        aires_p = aires_p / sample_size
+        top_indices = np.argsort( aires_p -aires_n)[-number_of_values:]
+
+        if plot: 
+            # Création du graphique
+            plt.figure(figsize=(10, 7))
+            for n,i in enumerate(top_indices):
+                plt.barh(number_of_values -n-1, aires_n[i]/sample_size, color='green')
+                plt.barh(number_of_values -n-1, aires_p[i]/sample_size, color='red')
+
+            # Ajustements
+            plt.yticks(list(range(number_of_values)), [data.columns[i] for i in top_indices[::-1]])
+            plt.axvline(0, color='black')  # Ligne centrale
+            plt.xlabel('Values')
+            plt.title(f'Average negative and positive value taken by each variable. Sample size = {sample_size}')
+            plt.legend()
+            plt.tight_layout()
+            plt.gca().invert_yaxis()  # Pour avoir la première ligne tout en haut
+
+            plt.show()
+        if return_:
+            return(data.columns, aires_n, aires_p)
+    
+    def rankvariables(self, sample_size=1, plot=True, return_=False):
+        
+        data = self.data
+        times = self.times
+        model = self.model
+
+
+        if sample_size is None:
+            sample_size = len(data)
+        sample_size = min(sample_size, len(data))
+        rank = []
+        for i in range(sample_size):
+            x, y = Shapvalues(model=model, data=data.iloc[i, :], times=times)
+            aires = np.array([np.trapz(np.abs(y[:,i]), x) for i in range(len(y[1])-1)])
+            top_indices = np.argsort(aires)[-len(data.columns):]
+            rank.append(top_indices)
+
+        # Matrice de comptage : lignes = rangs, colonnes = variables
+        counts = np.zeros((len(data.columns), len(data.columns)), dtype=int)
+
+        for arr in rank:
+            for pos, val in enumerate(arr):
+                counts[pos, val] += 1
+
+        df = pd.DataFrame(counts, columns=[i for i in range(len(data.columns))])
+        df.index = [f"{len(data.columns)-i}" for i in range(len(data.columns))]
+
+        if plot:
+            fig, ax = plt.subplots(figsize=(12, 8))
+
+            bottom = np.zeros(len(df))
+
+            # === Ajout d'une colormap rainbow ===
+            cmap = plt.get_cmap('rainbow')
+            colors = [cmap(i / len(df.columns)) for i in range(len(df.columns))]
+
+            for i, col in enumerate(df.columns):
+                ax.barh(df.index, df[col], left=bottom, label=data.columns[col], color=colors[i])
+                bottom += df[col]
+            # =====================================
+
+            ax.set_xlabel("Number of times ranked at this position")
+            ax.set_ylabel("Importance rank")
+            ax.set_title("Distribution of variables by their importance rank")
+            ax.legend(title="Variables", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
+            plt.tight_layout()
+            plt.show()
+
+        if return_:
+            df.columns = list(data.columns)
+            return df
+
+
+
+
+
+
+
+#fonctions définies en dur.
 
 def Shapvalues(model= None, data=None, times=None):
+    
+    """
+    Computes the SurvSHAP values of the RSF model.
+
+    Inputs :
+    model (RSF): the fited model (mandatory)
+    data (panda data frame): the data frame used to train the model (mandatory)
+    times (array): times to estimate (optional, by default the model unique_times_)
+
+    Outputs :
+    x (array): the times
+    y (array): a rray containing SurvSHAP(t) for every variable and t in times
+    """
+
     if times is None:
         times=model.estimators_[0].unique_times_
 
@@ -47,6 +253,21 @@ def Shapvalues(model= None, data=None, times=None):
     return(x,y)
 
 def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
+
+    """
+    Plots the graph of the SurvSHAP values.
+
+    Inputs :
+    x (array): the times (mandatory)
+    y (array): a rray containing SurvSHAP(t) for every variable and t in times (mandatory)
+    columns (list): a list of the variable names, in the same order as they appear in x (mandatory)
+    selection (string): 
+    data (panda data frame): the data frame used to train the model (mandatory)
+    times (array): times to estimate (optional, by default the model unique_times_)
+
+    Outputs :
+    None
+    """
 
     if selection=="minmax":
         top_values= [y[:,i].max() for i in range(len(y[1])-1)]
@@ -68,9 +289,9 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
 
 
         # Ajouter des labels et une légende
-        plt.xlabel("Temps (mois)")
-        plt.ylabel("Shap_values")
-        plt.title("Shap_values les plus contributives pour le patient méthode minmax")
+        plt.xlabel("Time")
+        plt.ylabel("SurvSHAP(t)")
+        plt.title("SurvSHAP values of most contributing variables selecting with minmax method")
         plt.legend(loc="upper left",fontsize=8)
 
         # Afficher le graphique
@@ -93,9 +314,9 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
             plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
 
         # Ajouter des labels et une légende
-        plt.xlabel("Temps (mois)")
-        plt.ylabel("Shap_values")
-        plt.title("Shap_values les plus contributives pour le patient méthode aire")
+        plt.xlabel("Time")
+        plt.ylabel("SurvSHAP(t)")
+        plt.title("SurvSHAP values of most contributing variables selecting with area under curve method")
         plt.legend(loc="upper left",fontsize=8)
 
         # Afficher le graphique
@@ -111,9 +332,9 @@ def STP_graph(x=None, y=None, columns=None, selection=None, min=None, max=None):
             plt.plot(x, y_plot[:,i], label=columns[i], color=colors[i])
 
         # Ajouter des labels et une légende
-        plt.xlabel("Temps (mois)")
-        plt.ylabel("Shap_values")
-        plt.title("Toutes les Shap_values du patient")
+        plt.xlabel("Time")
+        plt.ylabel("SurvSHAP(t)")
+        plt.title("All SurvSHAP values")
         plt.legend(loc="upper left",fontsize=8)
 
         # Afficher le graphique
@@ -144,8 +365,8 @@ def Shapvaluesrank(model= None, data=None, times=None, sample_size=None, number_
     # Ajustements
     plt.yticks(list(range(number_of_values)), [data.columns[i] for i in top_indices[::-1]])
     plt.axvline(0, color='black')  # Ligne centrale
-    plt.xlabel('Valeur')
-    plt.title('Comparaison valeurs négatives / positives par variable')
+    plt.xlabel('Values')
+    plt.title('Average negative and positive value taken by each variable')
     plt.legend()
     plt.tight_layout()
     plt.gca().invert_yaxis()  # Pour avoir la première ligne tout en haut
@@ -189,9 +410,9 @@ def VariableRank(model=None, data=None, times=None, sample_size=None, plot=True)
             bottom += df[col]
         # =====================================
 
-        ax.set_xlabel("Nombre d'apparitions à cette position")
-        ax.set_ylabel("Rang d'importance")
-        ax.set_title("Distribution des variables par rang d'importance")
+        ax.set_xlabel("Number of times ranked at this position")
+        ax.set_ylabel("Importance rank")
+        ax.set_title("Distribution of variables by their importance rank")
         ax.legend(title="Variables", bbox_to_anchor=(1.05, 1), loc="upper left", fontsize=8)
         plt.tight_layout()
         plt.show()
