@@ -14,45 +14,31 @@ library(coxed)
 #>
 #>
 
-data(veteran, package = "randomForestSRC")
+#data(veteran, package = "randomForestSRC")
 
 
-sTS_at_timepoint = function(data,
-                        target_var,
-                        status_var,
-                        n_tree,
-                        num_nodesize,
-                        time_point,
-                        type_pred){
+sTS_at_timepoint = function(RSF,
+                            target_var,
+                            status_var,
+                            n_tree,
+                            num_nodesize,
+                            time_point,
+                            type_pred){
   
   # 1er partie: On fait un treeShap de base, pour notamment récupérer le model unifie
   # 2eme partie: On génére une RSF
   # 3eme patie: Transformer la RSF en foret adapter à treeshap
   # 4eme partie: SurvTreeShap
   
-  data_tree <- data %>%
-    select(-c(target_var,status_var))
-  target <- data %>%
-    select(c(target_var)) %>%
-    as.matrix()
-  
-  
-  # 1er Partie: Création d'un treeshap (le + petit possible) 
   param <- list(objective = "reg:squarederror", max_depth = 6)
-  xgb_model <- xgboost::xgboost(as.matrix(data_tree),
+  xgb_model <- xgboost::xgboost(as.matrix(tibble(abc = c(1,1),bcd =c(1,1))),
                                 params = param,
-                                label = target,
+                                label = c(2,4),
                                 nrounds = 0, #compta python 0 ==> 1 le + petit possible
                                 verbose = 0)
-  unified <- unify(xgb_model, data_tree) #Greffeon
-  df_treeshap = unified$model #Utiliser pour calculer la dif du nmbr de var entre la RSF et le greffeon
   
   
-  # 2e Partie: génération d'une RSF
-  data_RSF <- data 
-  ## randomForestSRC ne prend pas directement en charge l'évaluation quasi-quotée
-  formula_rsf = as.formula(paste0("Surv(", target_var, ",",status_var,") ~ ."))
-  RSF <- rfsrc(formula = formula_rsf, data, ntree = n_tree, nodesize = num_nodesize, statistics=T)
+  
   # Transformer les data de pred de S(t)
   nmb_feuilles = RSF[["leaf.count"]]
   nmb_arbres = RSF[["ntree"]]
@@ -129,8 +115,9 @@ sTS_at_timepoint = function(data,
   # 4e Partie: Création d'un objet Treeshap
   #Objet de base treeshap à partie de la RF
   
+
   # Changer les lignes d'un model_unified "greffeon" puis couper
-  unified <- unify(xgb_model, data)
+  unified <- unify(xgb_model, RSF$xvar)
   
   # tentative greffe direct
   unified$model = df_surv
@@ -147,21 +134,18 @@ sTS_at_timepoint = function(data,
   
   #is.model_unified(unified)
   
-  treeshap1 <- treeshap(unified,  data, verbose = 0)
-  
-  treeshap1$eval_times = unique(data %>% select(c(target_var)) %>% arrange(target_var))
-  
-  
+  treeshap1 <- treeshap(unified,  RSF$xvar, verbose = 0)
+
+  treeshap1$eval_times =RSF[["time.interest"]]
   
   
+
   return(treeshap1)
 }
 
 # DATA
-data(veteran, package = "randomForestSRC")
 
 #df = sTS_at_timepoint(data = veteran,target_var = "time",status_var = "status",n_tree = 1,num_nodesize = 2,time_point = 1)
-
 
 
 
@@ -174,28 +158,70 @@ sTS_allpoints = function(data,
   
   df = list()
   
-data_tree <- data %>%
-  select(-c(target_var,status_var))
-target <- data %>%
-  select(c(target_var)) %>%
-  as.matrix()
-data_RSF <- data 
-formula_rsf = as.formula(paste0("Surv(", target_var, ",",status_var,") ~ ."))
-RSF <- rfsrc(formula = formula_rsf, data, ntree = n_tree, nodesize = num_nodesize, statistics=T)
+  # Change data
+  data_tree <- data %>%
+    select(-c(target_var,status_var))
+  data_tree_chara = data_tree %>%
+    select(where(~ is.character(.)))
+  if(ncol(data_tree_chara)>0){ data_tree_chara_dummies = fastDummies::dummy_cols(data_tree_chara) %>%
+    select(-names(data_tree_chara))}else{
+      data_tree_chara_dummies = data_tree_chara}
+  
+  
+  data_tree_factor = data_tree %>%
+    select(where(~ is.factor(.)))
+  if(ncol(data_tree_factor)>0){ data_tree_factor_dummies = fastDummies::dummy_cols(data_tree_factor) %>%
+    select(-names(data_tree_factor))}else{data_tree_factor_dummies = data_tree_factor}
+  
+  
+  data_tree_num = data_tree %>%
+    select(where(~ is.numeric(.)))
+  
+  
+  data_tree = cbind(data_tree_chara_dummies,
+                    data_tree_factor_dummies,
+                    data_tree_num)
+  
 
-time_points = RSF[["time.interest"]]
-
-
-for(i in 1:length(time_points)){
-  time = time_points[i]
-  df[[i]] = sTS_at_timepoint(data,
-                             target_var = target_var,
-                             status_var = status_var,
-                             n_tree = 1,
-                             num_nodesize = 2,
-                             time_point = time)$shaps
+  target <- data %>%
+    select(c(target_var)) %>%
+    as.matrix()
+  
+  # 2e Partie: génération d'une RSF
+  data_RSF <- data_tree %>% bind_cols(data %>%
+                                        select(c(target_var,status_var))
+  ) 
+  
+  ## randomForestSRC ne prend pas directement en charge l'évaluation quasi-quotée
+  formula_rsf = as.formula(paste0("Surv(", target_var, ",",status_var,") ~ ."))
+  RSF <- rfsrc(formula = formula_rsf, data = data_RSF, ntree = n_tree, nodesize = num_nodesize, statistics=T)
+  
+  time_points = RSF[["time.interest"]]
+  
+  
+  for(i in 1:length(time_points)){
+    time = time_points[i]
+    df[[i]] = sTS_at_timepoint(RSF,
+                               target_var = target_var,
+                               status_var = status_var,
+                               n_tree = 1,
+                               num_nodesize = 2,
+                               time_point = time)$shaps
+  }
+  names(df) = time_points
+  return(df)
 }
-names(df) = time_points
-return(df)
-}
+
+#data(veteran, package = "randomForestSRC")
+#df = sTS_allpoints(data = veteran, 
+#                   target_var = "time",
+#                   status_var = "status",
+#                   n_tree  = 10,
+#                   num_nodesize = 5
+#)
+
+
+
+
+
 
