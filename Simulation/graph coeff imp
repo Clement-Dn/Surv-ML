@@ -1,0 +1,75 @@
+library(reshape2)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(scales)
+library(treeshap)
+library(xgboost)
+library(randomForestSRC)
+library(tidyverse)
+library(coxed)
+
+setwd("~/")
+source("new_survTreeShap.R")
+
+liste_sTS = list()
+
+num_obs = 200
+for(i in 1:100){
+data_sim = sim.survdata(N = num_obs,
+                        T = 100,
+                        xvars = 5,
+                        beta = c(1,0,0,0,0),
+                        X = tibble(
+                          X1 = rbinom(num_obs,1, prob = 1/2),
+                          #X1 = rnorm(num_obs,0,1),
+                          X2 = rnorm(num_obs,0,1),
+                          X3 = rnorm(num_obs,0,1),
+                          X4 = rnorm(num_obs,0,1),
+                          X5 = rnorm(num_obs,0,1)
+                        ),
+                        num.data.frames = 1)$data
+
+
+df = sTS_allpoints(data = data_sim,
+                   target_var = "y",
+                   status_var = "failed",
+                   n_tree = 4,
+                   num_nodesize = 2)
+
+nmb_tp = length(df)
+
+df_aggregated <- do.call(rbind, df) %>% mutate(X1_value = rep(x= data_sim$X1, nmb_tp))
+
+moyennes_na <- colMeans(df_aggregated, na.rm = TRUE)
+
+liste_sTS[[i]] = moyennes_na
+print(i)
+}
+
+time_sts_aggregated <- as.data.frame(do.call(rbind, liste_sTS) )  %>%
+  mutate(across(where(is.numeric), ~ abs(.x)))
+
+rang <- as.data.frame(t(apply(time_sts_aggregated, 1,function(x) rank(-x, ties.method = "first")))) 
+
+
+
+c_rang = as.data.frame(sapply(rang, function(x) table(factor(x, levels = 1:5)))) %>%
+  mutate(count_rang = factor(1:5)) %>%
+  select(-X1_value)
+
+df_long <- c_rang %>%
+  tidyr::pivot_longer(-count_rang, names_to = "Variable", values_to = "Value") %>%
+  group_by(count_rang) %>%
+  mutate(Percentage = Value / sum(Value) * 100)
+
+custom_palette <- c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")
+
+ggplot(df_long, aes(x = factor(count_rang), y = Percentage, fill = Variable)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = paste0(round(Percentage, 1), "%")), 
+            position = position_fill(vjust = 0.5), size = 4, color = "white") +
+  scale_fill_manual(values = custom_palette) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(x = "Rang des variables", y = "Pourcentage", fill = "Variable") +
+  theme_minimal()
