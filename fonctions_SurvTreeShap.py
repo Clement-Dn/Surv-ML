@@ -152,8 +152,8 @@ class SurvTreeSHAPexplainer:
             x,y=Shapvalues(model= model, data=data.iloc[i, :], times=times)
             aires_n = aires_n + np.array([-np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
             aires_p = aires_p + np.array([np.trapz(np.abs(y[:,k]), x)+np.trapz(y[:,k],x) for k in range(len(y[1])-1)])
-        aires_n = aires_n / sample_size
-        aires_p = aires_p / sample_size
+        aires_n = aires_n / (sample_size*(times[-1]-times[0]))
+        aires_p = aires_p / (sample_size*(times[-1]-times[0]))
         top_indices = np.argsort( aires_p -aires_n)[-number_of_values:]
 
         if plot: 
