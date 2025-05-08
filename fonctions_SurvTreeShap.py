@@ -34,7 +34,7 @@ class SurvTreeSHAPexplainer:
                         ])
         return(values)
     
-    def plotgraph(self, n=0 , selection=None, min=None, max=None ):
+    def plotgraph(self, n=0 , selection=None, min=None, max=None, plot_average_surv=False ):
 
         """
         Plots the graph of the SurvSHAP values of data.iloc[iloc].
@@ -44,6 +44,7 @@ class SurvTreeSHAPexplainer:
         selection (str): the type of selection method we want to use for the plot: "area", "minmax" or None. "area" only keeps variables that have the highest and lowest area under the curve, "minmax" only keeps variables with the top highest and botom lowest values, None keeps every variable. 
         min (int): number of lowest variables to keep when using "area" or "minmax" selection
         max (int): number of highest variables to keep when using "area" or "minmax" selection
+        plot_average_surv (boolean): plots the average surv curv, by default False
         """
 
         y = self.computesurvshap(n)
@@ -68,6 +69,9 @@ class SurvTreeSHAPexplainer:
             for i in range(y_plot.shape[1]):
                 plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
 
+
+            if plot_average_surv:
+                plt.plot(x, y[:,len(y[1])-1], label = "average survival", color="black")
 
             # Ajouter des labels et une légende
             plt.xlabel("Time")
@@ -95,6 +99,9 @@ class SurvTreeSHAPexplainer:
             for i in range(y_plot.shape[1]):
                 plt.plot(x, y_plot[:,i], label=legend[i], color=colors[i])
 
+            if plot_average_surv:
+                plt.plot(x, y[:,len(y[1])-1], label = "average survival", color="black")
+
             # Ajouter des labels et une légende
             plt.xlabel("Time")
             plt.ylabel("SurvSHAP(t)")
@@ -113,6 +120,9 @@ class SurvTreeSHAPexplainer:
             plt.figure(figsize=(10,6))
             for i in range(y_plot.shape[1]):
                 plt.plot(x, y_plot[:,i], label=columns[i], color=colors[i])
+
+            if plot_average_surv:
+                plt.plot(x, y[:,len(y[1])-1], label = "average survival", color="black")
 
             # Ajouter des labels et une légende
             plt.xlabel("Time")
@@ -150,8 +160,8 @@ class SurvTreeSHAPexplainer:
             # Création du graphique
             plt.figure(figsize=(10, 7))
             for n,i in enumerate(top_indices):
-                plt.barh(number_of_values -n-1, aires_n[i]/sample_size, color='green')
-                plt.barh(number_of_values -n-1, aires_p[i]/sample_size, color='red')
+                plt.barh(number_of_values -n-1, aires_n[i]/sample_size, color='red')
+                plt.barh(number_of_values -n-1, aires_p[i]/sample_size, color='green')
 
             # Ajustements
             plt.yticks(list(range(number_of_values)), [data.columns[i] for i in top_indices[::-1]])
