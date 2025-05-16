@@ -1,6 +1,6 @@
 # Surv-ML
 
-This branch contains the SurvTreeSHAP(t) implementation in Pyhton
+This file contains the SurvTreeSHAP(t) implementation in Pyhton
 
 Content:
 
