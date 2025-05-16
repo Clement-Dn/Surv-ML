@@ -1,2 +1,0 @@
-# Surv-ML
-Projet Statapp
