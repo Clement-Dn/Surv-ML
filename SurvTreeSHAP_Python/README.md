@@ -1,4 +1,4 @@
-# Surv-ML
+# SurvTreeSHAP_Python
 
 This file contains the SurvTreeSHAP(t) implementation in Pyhton
 
