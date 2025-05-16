@@ -1,4 +1,4 @@
-# Surv-ML
+# test_performances
 Ce dossier contient des travaux préliminaires pour 
 s'approprier les méthodes survex sur R, ainsi que deux
 notebooks dans lesquels SurvTreeSHAP(t) est comparé à 
