@@ -1,17 +1,17 @@
 # test_performances
-Ce dossier contient des travaux préliminaires pour 
-s'approprier les méthodes survex sur R, ainsi que deux
-notebooks dans lesquels SurvTreeSHAP(t) est comparé à 
-KernelTreeSHAP(t) du point de vue des performances algorithmiques, 
-et au modèle de Cox pour montrer ses avantages en terme 
-d'explicabilité.
 
-NB_donnees_simul.ipynb contient les comparaisons en terme de complexité avec 
-KernelSurvSHAP(t) sur des données simulées selon l'hypothèse des risques 
-proportionnels. Il peut par ailleurs servir de manuel d'utilisation de
-SurvtreeSHAP(t).
+This folder contains preliminary works on R in order to
+grasp the survex method. The heart of the folder are the two python notebooks
+in which our function, SurvTreeSHAP(t), is compared to KernelSurvSHAP(t) in 
+terms of algorithmic performances, and to Cox model in order to show its
+functionalities in terms of explaining Random Forest predictions of survival
+functions.
 
-simul non proportionnal.ipynb compare SurvTreeSHAP(t) et le modèle de Cox sur des données
-non proportionnelles, c'est à dire qu'on attribue aux covariables explicatives 
-une contribution à la survie qui cette fois dépend du temps (au lieu d'avoir beta
-comme dans NB_donnes_simul on a beta(t)). 
+NB_donnees_simul.ipynb contains comparisons regarding complexity between 
+SurvTreeSHAP(t) and KernelSurvSHAP(t) on simulated data according to the
+proportionnal hazards hypothesis. It can be used as a user's guide for
+SurvTreeSHAP(t) as well.
+
+simul non proportionnal.ipynb compares SurvTreeSHAP(t) and Cox model on non proportionnal data, 
+meaning we attribute time dependent contributions to our covariates (instead of having 
+beta, we have beta(t))
